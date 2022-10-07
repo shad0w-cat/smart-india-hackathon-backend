@@ -5,11 +5,11 @@ const config = require('../config');
 async function loginUser(mobileNumber) {
     // const offset = helper.getOffset(page, config.listPerPage);
     const result = await db.query(
-        `SELECT count(*) as "totalUsers", usertype, password, CONCAT(firstName," ", lastName) AS "Name", email FROM users WHERE mobilenumber = '${mobileNumber}'; `
+        `SELECT count(*) as "totalUsers", usertype, password, CONCAT_WS(' ',firstName, lastName) AS "Name", emailAddress FROM users WHERE mobileNumber = '${mobileNumber}'; `
     );
     const data = helper.emptyOrRows(result.pop());
 
-    return { data }
+    return data
 }
 
 async function signUpUser(userDetails) {
@@ -21,7 +21,7 @@ async function signUpUser(userDetails) {
         (firstName, lastName, mobileNumber, aadhaarNumber, emailAddress, password, usertype)
         VALUES
         (?, ?, ?, ?, ?, ?, 'user')`,
-            [userDetails.fName, userDetails.lName, userDetails.number, userDetails.aadhaar, userDetails.password, userDetails.email]
+            [userDetails.fName, userDetails.lName, userDetails.number, userDetails.aadhaar, userDetails.email, userDetails.hashPassword]
         );
 
         if (result.affectedRows) {
@@ -38,17 +38,38 @@ async function signUpUser(userDetails) {
 
 async function update(tokenData) {
     try {
-        await db.query('UPDATE users SET refreshToken = ? WHERE mobilenumber = ?', [tokenData.refreshToken, tokenData.userId]);
+        await db.query('UPDATE users SET refreshToken = ? WHERE mobilenumber = ?', [tokenData.refreshToken, tokenData.mNumber]);
     }
     catch (error) {
         console.log(error)
     }
 }
 
-async function getUser() { }
+async function fetchUser(refreshToken) {
+    try {
+        const result = await db.query('SELECT * from users WHERE refreshToken = ?', [refreshToken]);
+        const data = helper.emptyOrRows(result);
+
+        return data
+    }
+    catch (error) {
+        console.log(error)
+    }
+}
+
+async function logout(mNumber) {
+    try {
+        await db.query('UPDATE users SET refreshToken = null WHERE mobilenumber = ?', [mNumber]);
+    }
+    catch (error) {
+        console.log(error)
+    }
+}
 
 module.exports = {
     loginUser,
     signUpUser,
-    update
+    update,
+    fetchUser,
+    logout
 }

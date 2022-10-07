@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const userServices = require('../services/userServices');
-
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken')
 router.get('/', async function (req, res, next) {
     try {
         res.send({ 'Message': "OK" });
@@ -26,25 +27,42 @@ router.post('/signup', async function (req, res, next) {
 router.post('/login', async function (req, res, next) {
     try {
         const userDetails = await userServices.loginUser(req.body.number);
+        console.log(userDetails, req.body.password, userDetails.password)
         const match = await bcrypt.compare(req.body.password, userDetails.password);
         if (!match) return res.status(400).json({ msg: "Wrong Password" });
-        const userId = req.body.number;
+        const mNumber = req.body.number;
         const name = userDetails.name;
         const email = userDetails.email;
-        const accessToken = jwt.sign({ userId, name, email }, process.env.JWT_SECRET, {
+        const usertype = userDetails.usertype;
+        const accessToken = jwt.sign({ mNumber, name, email, usertype }, process.env.ACCESS_TOKEN_SECRET, {
             expiresIn: '15s'
         });
-        const refreshToken = jwt.sign({ userId, name, email }, process.env.JWT_SECRET, {
+        const refreshToken = jwt.sign({ mNumber, name, email, usertype }, process.env.JWT_SECRET, {
             expiresIn: '1d'
         });
-        await userServices.update({ refreshToken, userId });
+        await userServices.update({ refreshToken, mNumber });
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             maxAge: 24 * 60 * 60 * 1000
         });
-        res.json({ accessToken });
+        res.json({ accessToken: accessToken, type: userDetails.usertype });
     } catch (error) {
-        res.status(404).json({ msg: "Email not found" });
+        console.log(error)
+        res.status(404).json({ msg: "User with given mobile number not found" });
     }
 });
+
+router.get('/logout', async (req, res) => {
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) return res.sendStatus(204);
+    //Query to find user with given refresh token
+    const user = await userServices.fetchUser(refreshToken);
+    if (!user[0]) return res.sendStatus(204);
+    const mNumber = user[0].mobileNumber;
+    // query to set user to null where id / mno match
+    await userServices.logout(mNumber);
+    res.clearCookie('refreshToken');
+    return res.sendStatus(200);
+});
+
 module.exports = router;
